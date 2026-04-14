@@ -89,23 +89,15 @@ export default function App() {
   const [adminTeams, setAdminTeams] = useState(INITIAL_TEAMS);
   const [adminSaved, setAdminSaved] = useState(false);
 
-  useEffect(() => {
-    loadResults();
-  }, []);
-
-  useEffect(() => {
-    if (page === 'leaderboard') fetchBrackets();
-  }, [page, results]);
+  useEffect(() => { loadResults(); }, []);
+  useEffect(() => { if (page === 'leaderboard') fetchBrackets(); }, [page, results]);
 
   async function loadResults() {
     const { data } = await supabase.from('results').select('*').eq('id', 1).single();
     if (data) {
       setResults(data.results || {});
       setAdminResults(data.results || {});
-      if (data.teams) {
-        setTeams(data.teams);
-        setAdminTeams(data.teams);
-      }
+      if (data.teams) { setTeams(data.teams); setAdminTeams(data.teams); }
     }
   }
 
@@ -123,9 +115,7 @@ export default function App() {
       const { data } = await supabase.from('brackets').insert([{ name: name.trim(), picks }]).select();
       if (data && data[0]) setMyId(data[0].id);
     }
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
   async function saveAdminResults() {
@@ -135,10 +125,8 @@ export default function App() {
     } else {
       await supabase.from('results').insert([{ id: 1, results: adminResults, teams: adminTeams }]);
     }
-    setResults(adminResults);
-    setTeams(adminTeams);
-    setAdminSaved(true);
-    setTimeout(() => setAdminSaved(false), 2000);
+    setResults(adminResults); setTeams(adminTeams);
+    setAdminSaved(true); setTimeout(() => setAdminSaved(false), 2000);
   }
 
   function pickWinner(matchup, team) {
@@ -209,7 +197,6 @@ export default function App() {
       finals: [{ seed: 'W', name: myPicks.wcf || '?' }, { seed: 'E', name: myPicks.ecf || '?' }],
     };
     const t = map[id] || [];
-
     return (
       <div style={s.matchupBox(conf)}>
         {t.map((team, i) => {
@@ -235,30 +222,53 @@ export default function App() {
     );
   }
 
+  function BracketRounds({ viewPicks, viewResults }) {
+    return (
+      <div>
+        <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
+        <div style={s.secLabel()}>First Round</div>
+        <Matchup id="w1" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="w2" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="w3" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="w4" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={s.secLabel()}>Semifinals</div>
+        <Matchup id="ws1" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="ws2" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={s.secLabel()}>Conference Finals</div>
+        <Matchup id="wcf" conf="west" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={{ marginTop: 20 }} />
+        <div style={s.secLabel(EAST_ACC)}>🏀 Eastern Conference</div>
+        <div style={s.secLabel()}>First Round</div>
+        <Matchup id="e1" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="e2" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="e3" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="e4" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={s.secLabel()}>Semifinals</div>
+        <Matchup id="es1" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <Matchup id="es2" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={s.secLabel()}>Conference Finals</div>
+        <Matchup id="ecf" conf="east" viewPicks={viewPicks} viewResults={viewResults} />
+        <div style={{ marginTop: 20 }} />
+        <div style={s.secLabel(GOLD)}>🏆 NBA Finals</div>
+        <Matchup id="finals" conf="finals" viewPicks={viewPicks} viewResults={viewResults} />
+      </div>
+    );
+  }
+
+  function NameInput() {
+    return (
+      <div>
+        <div style={s.label}>Your Name</div>
+        <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
+      </div>
+    );
+  }
+
   function BracketPage() {
     return (
       <div style={s.page}>
         <NameInput />
-        <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
-        <div style={s.secLabel()}>First Round</div>
-        <Matchup id="w1" conf="west" /><Matchup id="w2" conf="west" />
-        <Matchup id="w3" conf="west" /><Matchup id="w4" conf="west" />
-        <div style={s.secLabel()}>Semifinals</div>
-        <Matchup id="ws1" conf="west" /><Matchup id="ws2" conf="west" />
-        <div style={s.secLabel()}>Conference Finals</div>
-        <Matchup id="wcf" conf="west" />
-        <div style={{ marginTop: 20 }} />
-        <div style={s.secLabel(EAST_ACC)}>🏀 Eastern Conference</div>
-        <div style={s.secLabel()}>First Round</div>
-        <Matchup id="e1" conf="east" /><Matchup id="e2" conf="east" />
-        <Matchup id="e3" conf="east" /><Matchup id="e4" conf="east" />
-        <div style={s.secLabel()}>Semifinals</div>
-        <Matchup id="es1" conf="east" /><Matchup id="es2" conf="east" />
-        <div style={s.secLabel()}>Conference Finals</div>
-        <Matchup id="ecf" conf="east" />
-        <div style={{ marginTop: 20 }} />
-        <div style={s.secLabel(GOLD)}>🏆 NBA Finals</div>
-        <Matchup id="finals" conf="finals" />
+        <BracketRounds />
         <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,rgba(200,168,75,0.15),rgba(200,168,75,0.05))', border: `1px solid rgba(200,168,75,0.4)`, borderRadius: 8, padding: '18px', margin: '18px 0' }}>
           <div style={{ fontSize: '0.7rem', color: GOLD, letterSpacing: 4, textTransform: 'uppercase' }}>🏆 My Champion Pick</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e8c86b', marginTop: 5 }}>{picks.finals || '?'}</div>
@@ -310,12 +320,7 @@ export default function App() {
             </div>
             {expanded === b.id && (
               <div style={{ borderTop: `1px solid ${BORDER}`, padding: '12px 14px' }}>
-                <div style={s.secLabel(WEST_ACC)}>West</div>
-                {['w1','w2','w3','w4','ws1','ws2','wcf'].map(m => <Matchup key={m} id={m} conf="west" viewPicks={b.picks} viewResults={results} />)}
-                <div style={s.secLabel(EAST_ACC)}>East</div>
-                {['e1','e2','e3','e4','es1','es2','ecf'].map(m => <Matchup key={m} id={m} conf="east" viewPicks={b.picks} viewResults={results} />)}
-                <div style={s.secLabel(GOLD)}>Finals</div>
-                <Matchup id="finals" conf="finals" viewPicks={b.picks} viewResults={results} />
+                <BracketRounds viewPicks={b.picks} viewResults={results} />
               </div>
             )}
           </div>
@@ -426,14 +431,7 @@ export default function App() {
       </div>
     );
   }
-function NameInput() {
-    return (
-      <div>
-        <div style={s.label}>Your Name</div>
-        <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
-      </div>
-    );
-  }
+
   if (isAdmin) {
     return (
       <div style={s.app}>
