@@ -85,8 +85,9 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [myId, setMyId] = useState(null);
-  const [myPin, setMyPin] = useState('');
   const [hasSavedPin, setHasSavedPin] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [newPinConfirm, setNewPinConfirm] = useState('');
   const [adminPass, setAdminPass] = useState('');
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [adminResults, setAdminResults] = useState({});
@@ -96,8 +97,7 @@ export default function App() {
   const [lookupPin, setLookupPin] = useState('');
   const [lookupError, setLookupError] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [newPin, setNewPin] = useState('');
-  const [newPinConfirm, setNewPinConfirm] = useState('');
+  const [expanded, setExpanded] = useState(null);
 
   useEffect(() => { loadResults(); }, []);
   useEffect(() => { if (page === 'leaderboard') fetchBrackets(); }, [page, results]);
@@ -119,20 +119,17 @@ export default function App() {
   async function saveBracket() {
     if (isLocked) return;
     if (!name.trim()) return alert('Enter your name first!');
-    
-    // New bracket - require PIN setup
     if (!myId) {
       if (!newPin.trim() || newPin.length < 4) return alert('Set a 4-digit PIN first!');
       if (newPin !== newPinConfirm) return alert('PINs do not match!');
       setSaving(true);
       const { data } = await supabase.from('brackets').insert([{ name: name.trim(), picks, pin: newPin }]).select();
-      if (data && data[0]) { setMyId(data[0].id); setMyPin(newPin); setHasSavedPin(true); }
+      if (data && data[0]) { setMyId(data[0].id); setHasSavedPin(true); }
     } else {
       setSaving(true);
       const updateData = { picks, name };
       if (!hasSavedPin && newPin.length >= 4 && newPin === newPinConfirm) {
         updateData.pin = newPin;
-        setMyPin(newPin);
         setHasSavedPin(true);
       }
       await supabase.from('brackets').update(updateData).eq('id', myId);
@@ -142,13 +139,11 @@ export default function App() {
 
   async function lookupBracket() {
     if (!lookupName.trim()) return;
-    if (!lookupPin.trim()) { setLookupError('Enter your PIN!'); return; }
     setLookupLoading(true);
     setLookupError('');
     const { data } = await supabase.from('brackets').select('*').ilike('name', lookupName.trim()).limit(1);
     if (data && data.length > 0) {
       const b = data[0];
-      // If bracket has a PIN, verify it
       if (b.pin && b.pin !== lookupPin.trim()) {
         setLookupError('Wrong PIN! Try again.');
         setLookupLoading(false);
@@ -158,7 +153,6 @@ export default function App() {
       setName(b.name);
       setPicks(b.picks || INITIAL_PICKS);
       setHasSavedPin(!!b.pin);
-      setMyPin(b.pin || '');
       setPage('bracket');
     } else {
       setLookupError('No bracket found with that name. Check spelling!');
@@ -304,31 +298,6 @@ export default function App() {
     );
   }
 
-  function NameInput() {
-    return (
-      <div>
-        <div style={s.label}>Your Name</div>
-        <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
-      </div>
-    );
-  }
-
-  function PinSetup() {
-    if (hasSavedPin) return null;
-    return (
-      <div style={{ background: PANEL, border: `1px solid ${GOLD}`, borderRadius: 6, padding: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: '0.65rem', color: GOLD, letterSpacing: 2, marginBottom: 8 }}>🔒 SET YOUR PIN (so only you can edit)</div>
-        <input style={{ ...s.input, marginBottom: 8 }} type="number" placeholder="4-digit PIN..." maxLength={4}
-          value={newPin} onChange={e => setNewPin(e.target.value.slice(0,4))} />
-        <input style={{ ...s.input, marginBottom: 0 }} type="number" placeholder="Confirm PIN..."
-          value={newPinConfirm} onChange={e => setNewPinConfirm(e.target.value.slice(0,4))} />
-        {newPin && newPinConfirm && newPin !== newPinConfirm && (
-          <div style={{ fontSize: '0.7rem', color: RED, marginTop: 6 }}>PINs don't match!</div>
-        )}
-      </div>
-    );
-  }
-
   function BracketPage() {
     return (
       <div style={s.page}>
@@ -338,13 +307,28 @@ export default function App() {
             <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: 4 }}>Playoffs have begun. No more changes allowed.</div>
           </div>
         )}
-        <NameInput />
-        {!isLocked && <PinSetup />}
+
+        <div style={s.label}>Your Name</div>
+        <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
+
+        {!isLocked && !hasSavedPin && (
+          <div style={{ background: PANEL, border: `1px solid ${GOLD}`, borderRadius: 6, padding: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: '0.65rem', color: GOLD, letterSpacing: 2, marginBottom: 8 }}>🔒 SET A PIN — so only you can edit your bracket</div>
+            <input style={{ ...s.input, marginBottom: 8 }} type="number" placeholder="Choose a 4-digit PIN..." value={newPin} onChange={e => setNewPin(e.target.value.slice(0,4))} />
+            <input style={{ ...s.input, marginBottom: 0 }} type="number" placeholder="Confirm PIN..." value={newPinConfirm} onChange={e => setNewPinConfirm(e.target.value.slice(0,4))} />
+            {newPin && newPinConfirm && newPin !== newPinConfirm && (
+              <div style={{ fontSize: '0.7rem', color: RED, marginTop: 6 }}>PINs don't match!</div>
+            )}
+          </div>
+        )}
+
         <BracketRounds />
+
         <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,rgba(200,168,75,0.15),rgba(200,168,75,0.05))', border: `1px solid rgba(200,168,75,0.4)`, borderRadius: 8, padding: '18px', margin: '18px 0' }}>
           <div style={{ fontSize: '0.7rem', color: GOLD, letterSpacing: 4, textTransform: 'uppercase' }}>🏆 My Champion Pick</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e8c86b', marginTop: 5 }}>{picks.finals || '?'}</div>
         </div>
+
         {!isLocked && (
           <div style={{ textAlign: 'center' }}>
             <button style={s.btn()} onClick={saveBracket} disabled={saving}>
@@ -360,7 +344,6 @@ export default function App() {
   }
 
   function LeaderboardPage() {
-    const [expanded, setExpanded] = useState(null);
     const ranked = [...allBrackets].map(b => {
       const { score, correct, total } = calcScore(b.picks || {}, results);
       const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
@@ -412,13 +395,11 @@ export default function App() {
           Fill out your bracket, save your picks,<br />and see how your friends did!
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '0 auto' }}>
-          {!isLocked && <button style={s.btn()} onClick={() => setPage('bracket')}>📝 Fill Out My Bracket</button>}
+          {!isLocked && <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setHasSavedPin(false); setNewPin(''); setNewPinConfirm(''); setPage('bracket'); }}>📝 Fill Out My Bracket</button>}
           {!isLocked && <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>}
           <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('leaderboard')}>🏆 Leaderboard</button>
         </div>
-        {isLocked && (
-          <div style={{ marginTop: 20, fontSize: '0.8rem', color: RED }}>🔒 Brackets locked — Playoffs are live!</div>
-        )}
+        {isLocked && <div style={{ marginTop: 20, fontSize: '0.8rem', color: RED }}>🔒 Brackets locked — Playoffs are live!</div>}
         <p style={{ color: MUTED, fontSize: '0.65rem', marginTop: 28, letterSpacing: 1 }}>
           {isLocked ? 'Playoffs underway 🏀' : 'Locks April 18 at midnight MT'}
         </p>
@@ -435,7 +416,7 @@ export default function App() {
         <div style={s.label}>Your PIN</div>
         <input style={s.input} type="number" placeholder="Enter your PIN..." value={lookupPin} onChange={e => setLookupPin(e.target.value)} />
         <div style={{ fontSize: '0.7rem', color: MUTED, marginBottom: 12 }}>
-          No PIN yet? Enter anything — you'll set one when you save.
+          No PIN yet? Leave PIN blank and you can set one when you save.
         </div>
         {lookupError && <div style={{ fontSize: '0.75rem', color: RED, marginBottom: 10 }}>{lookupError}</div>}
         <button style={{ ...s.btn(), width: '100%' }} onClick={lookupBracket} disabled={lookupLoading}>
