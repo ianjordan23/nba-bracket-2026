@@ -238,8 +238,7 @@ export default function App() {
   function BracketPage() {
     return (
       <div style={s.page}>
-        <div style={s.label}>Your Name</div>
-        <input key="name-input" style={s.input} placeholder="Enter your name..." value={name} onChange={e => setName(e.target.value)} autoComplete="off" />
+        <NameInput />
         <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
         <div style={s.secLabel()}>First Round</div>
         <Matchup id="w1" conf="west" /><Matchup id="w2" conf="west" />
@@ -427,7 +426,14 @@ export default function App() {
       </div>
     );
   }
-
+function NameInput() {
+    return (
+      <div>
+        <div style={s.label}>Your Name</div>
+        <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
+      </div>
+    );
+  }
   if (isAdmin) {
     return (
       <div style={s.app}>
