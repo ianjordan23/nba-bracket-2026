@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
 const ADMIN_PASSWORD = '@cadecunningham2!';
-const LOCK_DATE = new Date('2026-04-18T00:00:00-06:00');
 
 const INITIAL_TEAMS = {
   west: {
@@ -66,120 +65,9 @@ function calcScore(picks, results) {
   return { score, correct, total };
 }
 
-const s = {
-  app: { minHeight: '100vh', background: DARK, color: '#e8e8f0', fontFamily: "'Barlow Condensed','Arial Narrow',sans-serif", padding: '0 0 60px' },
-  header: { textAlign: 'center', padding: '20px 16px 14px', borderBottom: `1px solid ${BORDER}` },
-  title: { fontSize: '2rem', fontWeight: 700, letterSpacing: 3, color: GOLD, margin: 0 },
-  subtitle: { fontSize: '0.75rem', color: MUTED, letterSpacing: 2, marginTop: 3 },
-  nav: { display: 'flex', justifyContent: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${BORDER}` },
-  navBtn: (active) => ({ background: active ? GOLD : 'transparent', color: active ? '#000' : MUTED, border: `1px solid ${active ? GOLD : BORDER}`, borderRadius: 3, padding: '7px 16px', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, letterSpacing: 2, cursor: 'pointer', textTransform: 'uppercase' }),
-  page: { padding: '16px 12px' },
-  label: { fontSize: '0.68rem', color: MUTED, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 },
-  input: { background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 4, color: '#e8e8f0', fontFamily: 'inherit', fontSize: '1rem', padding: '9px 12px', width: '100%', boxSizing: 'border-box', marginBottom: 14 },
-  btn: (bg, fg) => ({ background: bg || GOLD, color: fg || '#000', border: 'none', borderRadius: 3, padding: '11px 24px', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 700, letterSpacing: 2, cursor: 'pointer', textTransform: 'uppercase' }),
-  secLabel: (color) => ({ fontSize: '0.62rem', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: color || MUTED, textAlign: 'center', margin: '16px 0 6px' }),
-  matchupBox: (conf) => ({ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', marginBottom: 7, borderTop: `2px solid ${conf === 'west' ? WEST_ACC : conf === 'east' ? EAST_ACC : GOLD}` }),
-  teamRow: (status) => ({
-    display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer',
-    background: status === 'correct' ? 'rgba(46,204,113,0.1)' : status === 'wrong' ? 'rgba(231,76,60,0.07)' : status === 'selected' ? 'rgba(200,168,75,0.1)' : 'transparent',
-    borderLeft: status === 'correct' ? `3px solid ${GREEN}` : status === 'wrong' ? `3px solid ${RED}` : status === 'selected' ? `3px solid ${GOLD}` : '3px solid transparent',
-    transition: 'background 0.15s',
-  }),
-  seed: { fontSize: '0.62rem', color: MUTED, width: 14, textAlign: 'center', flexShrink: 0 },
-  teamName: (status) => ({
-    fontWeight: status === 'correct' || status === 'selected' ? 700 : 400,
-    fontSize: '0.88rem', flex: 1,
-    color: status === 'correct' ? GREEN : status === 'wrong' ? RED : status === 'selected' ? GOLD : '#e8e8f0',
-    textDecoration: status === 'wrong' ? 'line-through' : 'none',
-  }),
-  vs: { textAlign: 'center', fontSize: '0.55rem', color: BORDER, padding: '2px', background: 'rgba(255,255,255,0.02)' },
-};
-
-function Matchup({ id, conf, viewPicks, viewResults, allPicks, allResults, onPick, isLocked, teams }) {
-  const myPicks = viewPicks || allPicks;
-  const myResults = viewResults || allResults;
-  const w = teams.west; const e = teams.east;
-  const map = {
-    w1: [{ seed: 1, name: w[1] }, { seed: 8, name: w[8] }],
-    w2: [{ seed: 4, name: w[4] }, { seed: 5, name: w[5] }],
-    w3: [{ seed: 3, name: w[3] }, { seed: 6, name: w[6] }],
-    w4: [{ seed: 2, name: w[2] }, { seed: 7, name: w[7] }],
-    ws1: [{ seed: '', name: myPicks.w1 || '?' }, { seed: '', name: myPicks.w2 || '?' }],
-    ws2: [{ seed: '', name: myPicks.w3 || '?' }, { seed: '', name: myPicks.w4 || '?' }],
-    wcf: [{ seed: '', name: myPicks.ws1 || '?' }, { seed: '', name: myPicks.ws2 || '?' }],
-    e1: [{ seed: 1, name: e[1] }, { seed: 8, name: e[8] }],
-    e2: [{ seed: 4, name: e[4] }, { seed: 5, name: e[5] }],
-    e3: [{ seed: 3, name: e[3] }, { seed: 6, name: e[6] }],
-    e4: [{ seed: 2, name: e[2] }, { seed: 7, name: e[7] }],
-    es1: [{ seed: '', name: myPicks.e1 || '?' }, { seed: '', name: myPicks.e2 || '?' }],
-    es2: [{ seed: '', name: myPicks.e3 || '?' }, { seed: '', name: myPicks.e4 || '?' }],
-    ecf: [{ seed: '', name: myPicks.es1 || '?' }, { seed: '', name: myPicks.es2 || '?' }],
-    finals: [{ seed: 'W', name: myPicks.wcf || '?' }, { seed: 'E', name: myPicks.ecf || '?' }],
-  };
-  const t = map[id] || [];
-  return (
-    <div style={s.matchupBox(conf)}>
-      {t.map((team, i) => {
-        const isSelected = myPicks[id] === team.name && team.name !== '?';
-        const hasResult = !!myResults[id];
-        const isCorrect = hasResult && myPicks[id] === team.name && myPicks[id] === myResults[id];
-        const isWrong = hasResult && myPicks[id] === team.name && myPicks[id] !== myResults[id];
-        const status = isCorrect ? 'correct' : isWrong ? 'wrong' : isSelected ? 'selected' : 'none';
-        return (
-          <React.Fragment key={i}>
-            {i === 1 && <div style={s.vs}>VS</div>}
-            <div style={s.teamRow(status)} onClick={() => !viewPicks && !isLocked && team.name !== '?' && onPick(id, team.name)}>
-              <span style={s.seed}>{team.seed}</span>
-              <span style={s.teamName(status)}>{team.name}</span>
-              {isCorrect && <span style={{ fontSize: '0.6rem', background: GREEN, color: '#000', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>✓</span>}
-              {isWrong && <span style={{ fontSize: '0.6rem', background: RED, color: '#fff', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>✗</span>}
-              {!hasResult && isSelected && <span style={{ fontSize: '0.6rem', background: GOLD, color: '#000', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>WIN</span>}
-            </div>
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function BracketRounds({ viewPicks, viewResults, allPicks, allResults, onPick, isLocked, teams }) {
-  const mp = { viewPicks, viewResults, allPicks, allResults, onPick, isLocked, teams };
-  return (
-    <div>
-      <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
-      <div style={s.secLabel()}>First Round</div>
-      <Matchup id="w1" conf="west" {...mp} />
-      <Matchup id="w2" conf="west" {...mp} />
-      <Matchup id="w3" conf="west" {...mp} />
-      <Matchup id="w4" conf="west" {...mp} />
-      <div style={s.secLabel()}>Semifinals</div>
-      <Matchup id="ws1" conf="west" {...mp} />
-      <Matchup id="ws2" conf="west" {...mp} />
-      <div style={s.secLabel()}>Conference Finals</div>
-      <Matchup id="wcf" conf="west" {...mp} />
-      <div style={{ marginTop: 20 }} />
-      <div style={s.secLabel(EAST_ACC)}>🏀 Eastern Conference</div>
-      <div style={s.secLabel()}>First Round</div>
-      <Matchup id="e1" conf="east" {...mp} />
-      <Matchup id="e2" conf="east" {...mp} />
-      <Matchup id="e3" conf="east" {...mp} />
-      <Matchup id="e4" conf="east" {...mp} />
-      <div style={s.secLabel()}>Semifinals</div>
-      <Matchup id="es1" conf="east" {...mp} />
-      <Matchup id="es2" conf="east" {...mp} />
-      <div style={s.secLabel()}>Conference Finals</div>
-      <Matchup id="ecf" conf="east" {...mp} />
-      <div style={{ marginTop: 20 }} />
-      <div style={s.secLabel(GOLD)}>🏆 NBA Finals</div>
-      <Matchup id="finals" conf="finals" {...mp} />
-    </div>
-  );
-}
-
 export default function App() {
   const path = window.location.pathname;
   const isAdmin = path === '/admin';
-  const isLocked = new Date() >= LOCK_DATE;
 
   const [page, setPage] = useState('home');
   const [name, setName] = useState('');
@@ -218,7 +106,6 @@ export default function App() {
   }
 
   async function saveBracket() {
-    if (isLocked) return;
     if (!name.trim()) return alert('Enter your name first!');
     setSaving(true);
     if (myId) {
@@ -259,7 +146,6 @@ export default function App() {
   }
 
   function pickWinner(matchup, team) {
-    if (isLocked) return;
     const newPicks = { ...picks, [matchup]: team };
     function clearDownstream(m) {
       const map = {
@@ -276,7 +162,102 @@ export default function App() {
     setPicks(newPicks);
   }
 
-  const sharedProps = { allPicks: picks, allResults: results, onPick: pickWinner, isLocked, teams };
+  function getTeams(id, myPicks) {
+    const w = teams.west; const e = teams.east;
+    const map = {
+      w1: [{ seed: 1, name: w[1] }, { seed: 8, name: w[8] }],
+      w2: [{ seed: 4, name: w[4] }, { seed: 5, name: w[5] }],
+      w3: [{ seed: 3, name: w[3] }, { seed: 6, name: w[6] }],
+      w4: [{ seed: 2, name: w[2] }, { seed: 7, name: w[7] }],
+      ws1: [{ seed: '', name: myPicks.w1 || '?' }, { seed: '', name: myPicks.w2 || '?' }],
+      ws2: [{ seed: '', name: myPicks.w3 || '?' }, { seed: '', name: myPicks.w4 || '?' }],
+      wcf: [{ seed: '', name: myPicks.ws1 || '?' }, { seed: '', name: myPicks.ws2 || '?' }],
+      e1: [{ seed: 1, name: e[1] }, { seed: 8, name: e[8] }],
+      e2: [{ seed: 4, name: e[4] }, { seed: 5, name: e[5] }],
+      e3: [{ seed: 3, name: e[3] }, { seed: 6, name: e[6] }],
+      e4: [{ seed: 2, name: e[2] }, { seed: 7, name: e[7] }],
+      es1: [{ seed: '', name: myPicks.e1 || '?' }, { seed: '', name: myPicks.e2 || '?' }],
+      es2: [{ seed: '', name: myPicks.e3 || '?' }, { seed: '', name: myPicks.e4 || '?' }],
+      ecf: [{ seed: '', name: myPicks.es1 || '?' }, { seed: '', name: myPicks.es2 || '?' }],
+      finals: [{ seed: 'W', name: myPicks.wcf || '?' }, { seed: 'E', name: myPicks.ecf || '?' }],
+    };
+    return map[id] || [];
+  }
+
+  const s = {
+    matchupBox: (conf) => ({ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', marginBottom: 7, borderTop: `2px solid ${conf === 'west' ? WEST_ACC : conf === 'east' ? EAST_ACC : GOLD}` }),
+    teamRow: (status) => ({
+      display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer',
+      background: status === 'correct' ? 'rgba(46,204,113,0.1)' : status === 'wrong' ? 'rgba(231,76,60,0.07)' : status === 'selected' ? 'rgba(200,168,75,0.1)' : 'transparent',
+      borderLeft: status === 'correct' ? `3px solid ${GREEN}` : status === 'wrong' ? `3px solid ${RED}` : status === 'selected' ? `3px solid ${GOLD}` : '3px solid transparent',
+    }),
+    seed: { fontSize: '0.62rem', color: MUTED, width: 14, textAlign: 'center', flexShrink: 0 },
+    teamName: (status) => ({
+      fontWeight: status === 'correct' || status === 'selected' ? 700 : 400,
+      fontSize: '0.88rem', flex: 1,
+      color: status === 'correct' ? GREEN : status === 'wrong' ? RED : status === 'selected' ? GOLD : '#e8e8f0',
+      textDecoration: status === 'wrong' ? 'line-through' : 'none',
+    }),
+    vs: { textAlign: 'center', fontSize: '0.55rem', color: BORDER, padding: '2px', background: 'rgba(255,255,255,0.02)' },
+    secLabel: (color) => ({ fontSize: '0.62rem', fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: color || MUTED, textAlign: 'center', margin: '16px 0 6px' }),
+    page: { padding: '16px 12px' },
+    label: { fontSize: '0.68rem', color: MUTED, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 5 },
+    input: { background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 4, color: '#e8e8f0', fontFamily: 'inherit', fontSize: '1rem', padding: '9px 12px', width: '100%', boxSizing: 'border-box', marginBottom: 14 },
+    btn: (bg, fg) => ({ background: bg || GOLD, color: fg || '#000', border: 'none', borderRadius: 3, padding: '11px 24px', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 700, letterSpacing: 2, cursor: 'pointer', textTransform: 'uppercase' }),
+    navBtn: (active) => ({ background: active ? GOLD : 'transparent', color: active ? '#000' : MUTED, border: `1px solid ${active ? GOLD : BORDER}`, borderRadius: 3, padding: '7px 16px', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, letterSpacing: 2, cursor: 'pointer', textTransform: 'uppercase' }),
+  };
+
+  function renderMatchup(id, conf, myPicks, myResults, editable) {
+    const t = getTeams(id, myPicks);
+    return (
+      <div key={id} style={s.matchupBox(conf)}>
+        {t.map((team, i) => {
+          const isSelected = myPicks[id] === team.name && team.name !== '?';
+          const hasResult = !!myResults[id];
+          const isCorrect = hasResult && myPicks[id] === team.name && myPicks[id] === myResults[id];
+          const isWrong = hasResult && myPicks[id] === team.name && myPicks[id] !== myResults[id];
+          const status = isCorrect ? 'correct' : isWrong ? 'wrong' : isSelected ? 'selected' : 'none';
+          return (
+            <React.Fragment key={i}>
+              {i === 1 && <div style={s.vs}>VS</div>}
+              <div style={s.teamRow(status)} onClick={() => editable && team.name !== '?' && pickWinner(id, team.name)}>
+                <span style={s.seed}>{team.seed}</span>
+                <span style={s.teamName(status)}>{team.name}</span>
+                {isCorrect && <span style={{ fontSize: '0.6rem', background: GREEN, color: '#000', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>✓</span>}
+                {isWrong && <span style={{ fontSize: '0.6rem', background: RED, color: '#fff', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>✗</span>}
+                {!hasResult && isSelected && <span style={{ fontSize: '0.6rem', background: GOLD, color: '#000', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>WIN</span>}
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderBracket(myPicks, myResults, editable) {
+    return (
+      <div>
+        <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
+        <div style={s.secLabel()}>First Round</div>
+        {['w1','w2','w3','w4'].map(id => renderMatchup(id, 'west', myPicks, myResults, editable))}
+        <div style={s.secLabel()}>Semifinals</div>
+        {['ws1','ws2'].map(id => renderMatchup(id, 'west', myPicks, myResults, editable))}
+        <div style={s.secLabel()}>Conference Finals</div>
+        {renderMatchup('wcf', 'west', myPicks, myResults, editable)}
+        <div style={{ marginTop: 20 }} />
+        <div style={s.secLabel(EAST_ACC)}>🏀 Eastern Conference</div>
+        <div style={s.secLabel()}>First Round</div>
+        {['e1','e2','e3','e4'].map(id => renderMatchup(id, 'east', myPicks, myResults, editable))}
+        <div style={s.secLabel()}>Semifinals</div>
+        {['es1','es2'].map(id => renderMatchup(id, 'east', myPicks, myResults, editable))}
+        <div style={s.secLabel()}>Conference Finals</div>
+        {renderMatchup('ecf', 'east', myPicks, myResults, editable)}
+        <div style={{ marginTop: 20 }} />
+        <div style={s.secLabel(GOLD)}>🏆 NBA Finals</div>
+        {renderMatchup('finals', 'finals', myPicks, myResults, editable)}
+      </div>
+    );
+  }
 
   if (isAdmin) {
     const allMatchups = [
@@ -297,10 +278,10 @@ export default function App() {
       { id: 'finals', label: '🏆 NBA Finals', teams: [adminResults.wcf, adminResults.ecf].filter(Boolean) },
     ];
     return (
-      <div style={s.app}>
-        <div style={s.header}>
-          <div style={s.title}>NBA 2026 BRACKET</div>
-          <div style={s.subtitle}>ADMIN PANEL</div>
+      <div style={{ minHeight: '100vh', background: DARK, color: '#e8e8f0', fontFamily: "'Barlow Condensed','Arial Narrow',sans-serif", padding: '0 0 60px' }}>
+        <div style={{ textAlign: 'center', padding: '20px 16px 14px', borderBottom: `1px solid ${BORDER}` }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: 3, color: GOLD }}>NBA 2026 BRACKET</div>
+          <div style={{ fontSize: '0.75rem', color: MUTED, letterSpacing: 2, marginTop: 3 }}>ADMIN PANEL</div>
         </div>
         <div style={s.page}>
           {!adminAuthed ? (
@@ -312,7 +293,7 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 16 }}>🔒 ENTER RESULTS</div>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 16 }}>ENTER RESULTS</div>
               <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12, marginBottom: 14 }}>
                 <div style={{ fontSize: '0.65rem', color: GOLD, letterSpacing: 2, marginBottom: 10 }}>PLAY-IN SEEDS (7 & 8)</div>
                 {['west','east'].map(conf => (
@@ -355,16 +336,16 @@ export default function App() {
   }
 
   return (
-    <div style={s.app}>
+    <div style={{ minHeight: '100vh', background: DARK, color: '#e8e8f0', fontFamily: "'Barlow Condensed','Arial Narrow',sans-serif", padding: '0 0 60px' }}>
       <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet" />
-      <div style={s.header}>
-        <div style={s.title}>NBA 2026 BRACKET</div>
-        <div style={s.subtitle}>PLAYOFF PREDICTIONS</div>
+      <div style={{ textAlign: 'center', padding: '20px 16px 14px', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: 3, color: GOLD }}>NBA 2026 BRACKET</div>
+        <div style={{ fontSize: '0.75rem', color: MUTED, letterSpacing: 2, marginTop: 3 }}>PLAYOFF PREDICTIONS</div>
       </div>
-      <div style={s.nav}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${BORDER}` }}>
         <button style={s.navBtn(page === 'home')} onClick={() => setPage('home')}>Home</button>
         <button style={s.navBtn(page === 'bracket')} onClick={() => setPage('bracket')}>My Picks</button>
-        <button style={s.navBtn(page === 'leaderboard')} onClick={() => setPage('leaderboard')}>Leaderboard</button>
+        <button style={s.navBtn(page === 'leaderboard')} onClick={() => { fetchBrackets(); setPage('leaderboard'); }}>Leaderboard</button>
       </div>
 
       {page === 'home' && (
@@ -373,12 +354,11 @@ export default function App() {
           <div style={{ fontSize: '1.3rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 6 }}>NBA 2026 PLAYOFFS</div>
           <div style={{ color: MUTED, fontSize: '0.82rem', marginBottom: 28, lineHeight: 1.6 }}>Fill out your bracket, save your picks,<br />and see how your friends did!</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '0 auto' }}>
-            {!isLocked && <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>}
-            {!isLocked && <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>}
+            <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>
+            <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>
             <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => { fetchBrackets(); setPage('leaderboard'); }}>🏆 Leaderboard</button>
           </div>
-          {isLocked && <div style={{ marginTop: 20, fontSize: '0.8rem', color: RED }}>🔒 Brackets locked — Playoffs are live!</div>}
-          <p style={{ color: MUTED, fontSize: '0.65rem', marginTop: 28, letterSpacing: 1 }}>{isLocked ? 'Playoffs underway 🏀' : 'Locks April 18 at midnight MT'}</p>
+          <p style={{ color: MUTED, fontSize: '0.65rem', marginTop: 28, letterSpacing: 1 }}>Play-In: April 14–17 · Locks April 18 midnight MT</p>
         </div>
       )}
 
@@ -386,40 +366,30 @@ export default function App() {
         <div style={{ ...s.page, maxWidth: 340, margin: '0 auto' }}>
           <div style={{ fontSize: '1rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 16 }}>✏️ EDIT MY BRACKET</div>
           <div style={s.label}>Your Name</div>
-          <input style={s.input} placeholder="Enter your name exactly as you saved it..." value={lookupName} onChange={e => setLookupName(e.target.value)} autoComplete="off" />
+          <input style={s.input} placeholder="Enter your name exactly as saved..." value={lookupName} onChange={e => setLookupName(e.target.value)} autoComplete="off" />
           {lookupError && <div style={{ fontSize: '0.75rem', color: RED, marginBottom: 10 }}>{lookupError}</div>}
           <button style={{ ...s.btn(), width: '100%' }} onClick={lookupBracket} disabled={lookupLoading}>
             {lookupLoading ? 'Looking up...' : 'Find My Bracket'}
           </button>
-          <p style={{ color: MUTED, fontSize: '0.7rem', marginTop: 12, textAlign: 'center' }}>Make sure you spell your name exactly as you entered it!</p>
+          <p style={{ color: MUTED, fontSize: '0.7rem', marginTop: 12, textAlign: 'center' }}>Spell your name exactly as you entered it!</p>
         </div>
       )}
 
       {page === 'bracket' && (
         <div style={s.page}>
-          {isLocked && (
-            <div style={{ background: 'rgba(231,76,60,0.1)', border: `1px solid ${RED}`, borderRadius: 6, padding: 12, marginBottom: 14, textAlign: 'center' }}>
-              <div style={{ fontSize: '0.9rem', color: RED, fontWeight: 700 }}>🔒 Brackets are locked!</div>
-              <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: 4 }}>Playoffs have begun. No more changes.</div>
-            </div>
-          )}
           <div style={s.label}>Your Name</div>
           <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
-          <BracketRounds {...sharedProps} />
+          {renderBracket(picks, results, true)}
           <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,rgba(200,168,75,0.15),rgba(200,168,75,0.05))', border: `1px solid rgba(200,168,75,0.4)`, borderRadius: 8, padding: '18px', margin: '18px 0' }}>
             <div style={{ fontSize: '0.7rem', color: GOLD, letterSpacing: 4, textTransform: 'uppercase' }}>🏆 My Champion Pick</div>
             <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e8c86b', marginTop: 5 }}>{picks.finals || '?'}</div>
           </div>
-          {!isLocked && (
-            <div style={{ textAlign: 'center' }}>
-              <button style={s.btn()} onClick={saveBracket} disabled={saving}>
-                {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save My Picks'}
-              </button>
-            </div>
-          )}
-          <p style={{ textAlign: 'center', color: MUTED, fontSize: '0.68rem', marginTop: 14, letterSpacing: 1 }}>
-            {isLocked ? 'Playoffs are underway! 🏀' : 'Locks April 18 at midnight MT'}
-          </p>
+          <div style={{ textAlign: 'center' }}>
+            <button style={s.btn()} onClick={saveBracket} disabled={saving}>
+              {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save My Picks'}
+            </button>
+          </div>
+          <p style={{ textAlign: 'center', color: MUTED, fontSize: '0.68rem', marginTop: 14, letterSpacing: 1 }}>Locks April 18 at midnight MT</p>
         </div>
       )}
 
@@ -454,7 +424,7 @@ export default function App() {
               </div>
               {expanded === b.id && (
                 <div style={{ borderTop: `1px solid ${BORDER}`, padding: '12px 14px' }}>
-                  <BracketRounds viewPicks={b.picks} viewResults={results} allPicks={b.picks} allResults={results} onPick={() => {}} isLocked={true} teams={teams} />
+                  {renderBracket(b.picks || INITIAL_PICKS, results, false)}
                 </div>
               )}
             </div>
