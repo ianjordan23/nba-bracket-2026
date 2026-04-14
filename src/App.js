@@ -239,7 +239,7 @@ export default function App() {
     return (
       <div style={s.page}>
         <div style={s.label}>Your Name</div>
-        <input style={s.input} placeholder="Enter your name..." value={name} onChange={e => setName(e.target.value)} />
+        <input key="name-input" style={s.input} placeholder="Enter your name..." value={name} onChange={e => setName(e.target.value)} autoComplete="off" />
         <div style={s.secLabel(WEST_ACC)}>🏀 Western Conference</div>
         <div style={s.secLabel()}>First Round</div>
         <Matchup id="w1" conf="west" /><Matchup id="w2" conf="west" />
