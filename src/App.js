@@ -34,7 +34,7 @@ const MATCHUP_ROUND = {
   finals: 8,
 };
 
-const POINTS = { 1: 1, 2: 2, 4: 4, 8: 8 };
+const POINTS = { 1: 100, 2: 200, 4: 400, 8: 800 };
 
 const INITIAL_PICKS = {
   w1: null, w2: null, w3: null, w4: null,
