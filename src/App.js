@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 
 const ADMIN_PASSWORD = '@cadecunningham2!';
@@ -22,6 +22,7 @@ const MATCHUP_ROUND = {
   ws1:2,ws2:2,es1:2,es2:2,wcf:4,ecf:4,finals:8,
 };
 const POINTS = {1:100,2:200,4:400,8:800};
+const ROUND_NAMES = {1:'First Round',2:'Semifinals',4:'Conference Finals',8:'NBA Finals'};
 const INITIAL_PICKS = {
   w1:null,w2:null,w3:null,w4:null,ws1:null,ws2:null,wcf:null,
   e1:null,e2:null,e3:null,e4:null,es1:null,es2:null,ecf:null,finals:null,
@@ -53,6 +54,27 @@ function getTopChampPicks(allBrackets) {
   return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,3);
 }
 
+function getPickOfRound(allBrackets, results) {
+  // For each round, find who got the most correct
+  const rounds = [1,2,4,8];
+  const roundWinners = {};
+  rounds.forEach(round => {
+    const matchupsInRound = Object.keys(MATCHUP_ROUND).filter(m => MATCHUP_ROUND[m]===round);
+    const completedMatchups = matchupsInRound.filter(m => results[m]);
+    if (completedMatchups.length === 0) return;
+    
+    let best = 0;
+    let winners = [];
+    allBrackets.forEach(b => {
+      const correct = completedMatchups.filter(m => b.picks?.[m] === results[m]).length;
+      if (correct > best) { best = correct; winners = [b.name]; }
+      else if (correct === best && correct > 0) { winners.push(b.name); }
+    });
+    if (best > 0) roundWinners[round] = { names: winners, correct: best, total: completedMatchups.length };
+  });
+  return roundWinners;
+}
+
 export default function App() {
   const isAdmin = window.location.pathname === '/admin';
   const isLocked = new Date() >= LOCK_DATE;
@@ -68,6 +90,7 @@ export default function App() {
   const [myId, setMyId] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [countdown, setCountdown] = useState('');
+  const [banner, setBanner] = useState(null);
   const [adminPass, setAdminPass] = useState('');
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [adminResults, setAdminResults] = useState({});
@@ -76,8 +99,11 @@ export default function App() {
   const [lookupName, setLookupName] = useState('');
   const [lookupError, setLookupError] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
+  const bannerTimeout = useRef(null);
+  const prevResults = useRef({});
 
   useEffect(() => { loadResults(); fetchBrackets(); }, []);
+
   useEffect(() => {
     const tick = () => {
       const diff = LOCK_DATE - new Date();
@@ -93,11 +119,41 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  // Poll for new results every 30 seconds and show banner
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      const {data} = await supabase.from('results').select('*').eq('id',1).single();
+      if (data && data.results) {
+        const newResults = data.results;
+        const oldResults = prevResults.current;
+        // Find any newly added results
+        Object.entries(newResults).forEach(([matchup, winner]) => {
+          if (!oldResults[matchup] && winner) {
+            showBanner(`🏀 ${winner} wins!`);
+          }
+        });
+        if (JSON.stringify(newResults) !== JSON.stringify(oldResults)) {
+          setResults(newResults);
+          if (data.teams) setTeams(data.teams);
+          prevResults.current = newResults;
+        }
+      }
+    }, 30000);
+    return () => clearInterval(poll);
+  }, []);
+
+  function showBanner(message) {
+    setBanner(message);
+    if (bannerTimeout.current) clearTimeout(bannerTimeout.current);
+    bannerTimeout.current = setTimeout(() => setBanner(null), 5000);
+  }
+
   async function loadResults() {
     const {data} = await supabase.from('results').select('*').eq('id',1).single();
     if (data) {
       setResults(data.results||{});
       setAdminResults(data.results||{});
+      prevResults.current = data.results||{};
       if (data.teams) { setTeams(data.teams); setAdminTeams(data.teams); }
     }
   }
@@ -245,6 +301,7 @@ export default function App() {
   }
 
   const topChampPicks = getTopChampPicks(allBrackets);
+  const pickOfRound = getPickOfRound(allBrackets, results);
   const ranked = [...allBrackets].map(b => {
     const {score,correct,total,pct,maxRemaining} = calcScore(b.picks||{},results);
     const champEliminated = b.picks?.finals && Object.keys(results).length>0 && !Object.values(results).includes(b.picks.finals);
@@ -329,7 +386,15 @@ export default function App() {
   return (
     <div style={{minHeight:'100vh',background:DARK,color:'#e8e8f0',fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",padding:'0 0 60px'}}>
       <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet"/>
-      <div style={{textAlign:'center',padding:'20px 16px 14px',borderBottom:`1px solid ${BORDER}`}}>
+
+      {/* Result Banner */}
+      {banner && (
+        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:9999,background:GREEN,color:'#000',textAlign:'center',padding:'14px',fontFamily:"'Barlow Condensed',sans-serif",fontSize:'1.1rem',fontWeight:700,letterSpacing:2,boxShadow:'0 4px 20px rgba(0,0,0,0.5)',animation:'slideDown 0.3s ease'}}>
+          {banner} <span style={{opacity:0.6,fontSize:'0.8rem',marginLeft:8}}>tap anywhere to dismiss</span>
+        </div>
+      )}
+
+      <div style={{textAlign:'center',padding:'20px 16px 14px',borderBottom:`1px solid ${BORDER}`,marginTop:banner?52:0}}>
         <div style={{fontSize:'2rem',fontWeight:700,letterSpacing:3,color:GOLD}}>NBA 2026 BRACKET</div>
         <div style={{fontSize:'0.75rem',color:MUTED,letterSpacing:2,marginTop:3}}>PLAYOFF PREDICTIONS</div>
       </div>
@@ -340,7 +405,7 @@ export default function App() {
       </div>
 
       {page==='home' && (
-        <div style={{...sty.page,textAlign:'center',paddingTop:28}}>
+        <div style={{...sty.page,textAlign:'center',paddingTop:28}} onClick={()=>banner&&setBanner(null)}>
           <div style={{fontSize:'2.5rem',marginBottom:8}}>🏀</div>
           <div style={{fontSize:'1.3rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:4}}>NBA 2026 PLAYOFFS</div>
           {!isLocked ? (
@@ -361,6 +426,20 @@ export default function App() {
                 <div key={team} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:i<topChampPicks.length-1?`1px solid ${BORDER}`:'none'}}>
                   <span style={{fontSize:'0.9rem',fontWeight:700}}>{i===0?'🥇':i===1?'🥈':'🥉'} {team}</span>
                   <span style={{fontSize:'0.7rem',color:MUTED}}>{count} of {allBrackets.length} picks</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pick of the Round */}
+          {Object.keys(pickOfRound).length>0 && (
+            <div style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:8,padding:'14px',margin:'12px auto',maxWidth:300,textAlign:'left'}}>
+              <div style={{fontSize:'0.6rem',color:GOLD,letterSpacing:3,marginBottom:10,textAlign:'center'}}>👑 PICK OF THE ROUND</div>
+              {Object.entries(pickOfRound).reverse().map(([round,data])=>(
+                <div key={round} style={{padding:'6px 0',borderBottom:`1px solid ${BORDER}`}}>
+                  <div style={{fontSize:'0.6rem',color:MUTED,letterSpacing:2,marginBottom:3}}>{ROUND_NAMES[round]}</div>
+                  <div style={{fontSize:'0.88rem',fontWeight:700,color:GOLD}}>👑 {data.names.join(', ')}</div>
+                  <div style={{fontSize:'0.65rem',color:MUTED}}>{data.correct}/{data.total} correct</div>
                 </div>
               ))}
             </div>
@@ -389,7 +468,7 @@ export default function App() {
       )}
 
       {page==='bracket' && (
-        <div style={sty.page}>
+        <div style={sty.page} onClick={()=>banner&&setBanner(null)}>
           {isLocked && (
             <div style={{background:'rgba(231,76,60,0.1)',border:`1px solid ${RED}`,borderRadius:6,padding:12,marginBottom:14,textAlign:'center'}}>
               <div style={{fontSize:'0.9rem',color:RED,fontWeight:700}}>🔒 Brackets are locked!</div>
@@ -416,7 +495,7 @@ export default function App() {
       )}
 
       {page==='leaderboard' && (
-        <div style={sty.page}>
+        <div style={sty.page} onClick={()=>banner&&setBanner(null)}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:'1rem',fontWeight:700,color:GOLD,letterSpacing:2}}>LEADERBOARD</div>
             <button style={{...sty.btn(),padding:'5px 12px',fontSize:'0.68rem'}} onClick={fetchBrackets}>Refresh</button>
@@ -428,9 +507,12 @@ export default function App() {
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
                   <div style={{fontSize:'1.2rem',width:28}}>{idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':`${idx+1}.`}</div>
                   <div style={{flex:1}}>
-                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                       <span style={{fontWeight:700,fontSize:'0.95rem',color:idx===0?GOLD:'#e8e8f0'}}>{b.name}</span>
                       {b.champEliminated && <span style={{fontSize:'0.55rem',background:RED,color:'#fff',padding:'1px 5px',borderRadius:2,fontWeight:700}}>💀 ELIM</span>}
+                      {Object.entries(pickOfRound).some(([,data])=>data.names.includes(b.name)) && (
+                        <span style={{fontSize:'0.55rem',background:GOLD,color:'#000',padding:'1px 5px',borderRadius:2,fontWeight:700}}>👑 ROUND WINNER</span>
+                      )}
                     </div>
                     <div style={{fontSize:'0.68rem',color:MUTED,marginTop:2}}>{b.picks?.finals||'—'} to win</div>
                   </div>
