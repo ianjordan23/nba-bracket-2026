@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
 const ADMIN_PASSWORD = '@cadecunningham2!';
+const LOCK_DATE = new Date('2026-04-18T00:00:00-06:00');
 
 const INITIAL_TEAMS = {
   west: {
@@ -35,6 +36,7 @@ const MATCHUP_ROUND = {
 };
 
 const POINTS = { 1: 100, 2: 200, 4: 400, 8: 800 };
+const MAX_SCORE = 3200;
 
 const INITIAL_PICKS = {
   w1: null, w2: null, w3: null, w4: null,
@@ -56,18 +58,51 @@ const RED = '#e74c3c';
 
 function calcScore(picks, results) {
   let score = 0; let correct = 0; let total = 0;
-  Object.keys(picks).forEach(m => {
+  let maxRemaining = 0;
+  Object.keys(MATCHUP_ROUND).forEach(m => {
+    const pts = POINTS[MATCHUP_ROUND[m]] || 100;
     if (picks[m] && results[m]) {
       total++;
-      if (picks[m] === results[m]) { score += POINTS[MATCHUP_ROUND[m]] || 1; correct++; }
+      if (picks[m] === results[m]) { score += pts; correct++; }
+      // if result is known and wrong, no more points possible for this
+    } else if (picks[m] && !results[m]) {
+      // game not played yet, still possible
+      maxRemaining += pts;
     }
   });
-  return { score, correct, total };
+  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  return { score, correct, total, pct, maxRemaining };
+}
+
+function getMostPopular(allBrackets) {
+  const counts = {};
+  allBrackets.forEach(b => {
+    Object.entries(b.picks || {}).forEach(([matchup, team]) => {
+      if (team) {
+        if (!counts[team]) counts[team] = 0;
+        counts[team]++;
+      }
+    });
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+}
+
+function getChampEliminated(picks, results) {
+  if (!picks.finals) return false;
+  // Check if champion pick lost anywhere
+  const allResults = Object.values(results);
+  const champPick = picks.finals;
+  // If champion pick appears as a loser (not in results values where it won)
+  return Object.entries(results).some(([matchup, winner]) => {
+    const matchupTeams = ['w1','w2','w3','w4','e1','e2','e3','e4','ws1','ws2','wcf','ecf','es1','es2','wcf','finals'];
+    return winner !== champPick && matchupTeams.includes(matchup);
+  }) && !Object.values(results).includes(champPick) && Object.keys(results).length > 0;
 }
 
 export default function App() {
   const path = window.location.pathname;
   const isAdmin = path === '/admin';
+  const isLocked = new Date() >= LOCK_DATE;
 
   const [page, setPage] = useState('home');
   const [name, setName] = useState('');
@@ -87,9 +122,26 @@ export default function App() {
   const [lookupName, setLookupName] = useState('');
   const [lookupError, setLookupError] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [countdown, setCountdown] = useState('');
 
   useEffect(() => { loadResults(); }, []);
   useEffect(() => { if (page === 'leaderboard') fetchBrackets(); }, [page]);
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const diff = LOCK_DATE - now;
+      if (diff <= 0) { setCountdown('🔒 Locked!'); return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setCountdown(`${d}d ${h}h ${m}m ${s}s`);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function loadResults() {
     const { data } = await supabase.from('results').select('*').eq('id', 1).single();
@@ -146,6 +198,7 @@ export default function App() {
   }
 
   function pickWinner(matchup, team) {
+    if (isLocked) return;
     const newPicks = { ...picks, [matchup]: team };
     function clearDownstream(m) {
       const map = {
@@ -162,7 +215,7 @@ export default function App() {
     setPicks(newPicks);
   }
 
-  function getTeams(id, myPicks) {
+  function getTeamList(id, myPicks) {
     const w = teams.west; const e = teams.east;
     const map = {
       w1: [{ seed: 1, name: w[1] }, { seed: 8, name: w[8] }],
@@ -208,7 +261,7 @@ export default function App() {
   };
 
   function renderMatchup(id, conf, myPicks, myResults, editable) {
-    const t = getTeams(id, myPicks);
+    const t = getTeamList(id, myPicks);
     return (
       <div key={id} style={s.matchupBox(conf)}>
         {t.map((team, i) => {
@@ -335,6 +388,14 @@ export default function App() {
     );
   }
 
+  const ranked = [...allBrackets].map(b => {
+    const { score, correct, total, pct, maxRemaining } = calcScore(b.picks || {}, results);
+    const champEliminated = b.picks?.finals && Object.keys(results).length > 0 && !Object.values(results).includes(b.picks.finals) && Object.values(results).some(r => r !== b.picks.finals);
+    return { ...b, score, correct, total, pct, maxRemaining, champEliminated };
+  }).sort((a, b) => b.score - a.score);
+
+  const popularPicks = getMostPopular(allBrackets);
+
   return (
     <div style={{ minHeight: '100vh', background: DARK, color: '#e8e8f0', fontFamily: "'Barlow Condensed','Arial Narrow',sans-serif", padding: '0 0 60px' }}>
       <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -349,16 +410,44 @@ export default function App() {
       </div>
 
       {page === 'home' && (
-        <div style={{ ...s.page, textAlign: 'center', paddingTop: 36 }}>
-          <div style={{ fontSize: '2.8rem', marginBottom: 12 }}>🏀</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 6 }}>NBA 2026 PLAYOFFS</div>
-          <div style={{ color: MUTED, fontSize: '0.82rem', marginBottom: 28, lineHeight: 1.6 }}>Fill out your bracket, save your picks,<br />and see how your friends did!</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '0 auto' }}>
-            <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>
-            <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>
+        <div style={{ ...s.page, textAlign: 'center', paddingTop: 28 }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>🏀</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, color: GOLD, letterSpacing: 2, marginBottom: 4 }}>NBA 2026 PLAYOFFS</div>
+
+          {/* Countdown */}
+          {!isLocked ? (
+            <div style={{ background: PANEL, border: `1px solid ${GOLD}`, borderRadius: 8, padding: '14px 20px', margin: '16px auto', maxWidth: 280, display: 'inline-block' }}>
+              <div style={{ fontSize: '0.6rem', color: GOLD, letterSpacing: 3, marginBottom: 4 }}>⏰ BRACKETS LOCK IN</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#e8c86b', letterSpacing: 2 }}>{countdown}</div>
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(231,76,60,0.1)', border: `1px solid ${RED}`, borderRadius: 8, padding: '10px 20px', margin: '16px auto', maxWidth: 280, display: 'inline-block' }}>
+              <div style={{ fontSize: '0.9rem', color: RED, fontWeight: 700 }}>🔒 Brackets Locked!</div>
+            </div>
+          )}
+
+          {/* Most Popular Picks */}
+          {popularPicks.length > 0 && (
+            <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px', margin: '16px auto', maxWidth: 320, textAlign: 'left' }}>
+              <div style={{ fontSize: '0.62rem', color: GOLD, letterSpacing: 3, marginBottom: 10, textAlign: 'center' }}>🔥 MOST POPULAR PICKS</div>
+              {popularPicks.map(([team, count]) => (
+                <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{team}</div>
+                  <div style={{ fontSize: '0.7rem', color: MUTED }}>{count} pick{count !== 1 ? 's' : ''}</div>
+                  <div style={{ background: BORDER, borderRadius: 3, height: 6, width: 80 }}>
+                    <div style={{ width: `${(count / allBrackets.length) * 100}%`, background: GOLD, height: '100%', borderRadius: 3 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '16px auto 0' }}>
+            {!isLocked && <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>}
+            {!isLocked && <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>}
             <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => { fetchBrackets(); setPage('leaderboard'); }}>🏆 Leaderboard</button>
           </div>
-          <p style={{ color: MUTED, fontSize: '0.65rem', marginTop: 28, letterSpacing: 1 }}>Play-In: April 14–17 · Locks April 18 midnight MT</p>
+          <p style={{ color: MUTED, fontSize: '0.65rem', marginTop: 20, letterSpacing: 1 }}>Play-In: April 14–17 · Playoffs Begin: April 18</p>
         </div>
       )}
 
@@ -377,19 +466,28 @@ export default function App() {
 
       {page === 'bracket' && (
         <div style={s.page}>
+          {isLocked && (
+            <div style={{ background: 'rgba(231,76,60,0.1)', border: `1px solid ${RED}`, borderRadius: 6, padding: 12, marginBottom: 14, textAlign: 'center' }}>
+              <div style={{ fontSize: '0.9rem', color: RED, fontWeight: 700 }}>🔒 Brackets are locked!</div>
+            </div>
+          )}
           <div style={s.label}>Your Name</div>
           <input style={s.input} placeholder="Enter your name..." defaultValue={name} onBlur={e => setName(e.target.value)} autoComplete="off" />
-          {renderBracket(picks, results, true)}
+          {renderBracket(picks, results, !isLocked)}
           <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,rgba(200,168,75,0.15),rgba(200,168,75,0.05))', border: `1px solid rgba(200,168,75,0.4)`, borderRadius: 8, padding: '18px', margin: '18px 0' }}>
             <div style={{ fontSize: '0.7rem', color: GOLD, letterSpacing: 4, textTransform: 'uppercase' }}>🏆 My Champion Pick</div>
             <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e8c86b', marginTop: 5 }}>{picks.finals || '?'}</div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <button style={s.btn()} onClick={saveBracket} disabled={saving}>
-              {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save My Picks'}
-            </button>
-          </div>
-          <p style={{ textAlign: 'center', color: MUTED, fontSize: '0.68rem', marginTop: 14, letterSpacing: 1 }}>Locks April 18 at midnight MT</p>
+          {!isLocked && (
+            <div style={{ textAlign: 'center' }}>
+              <button style={s.btn()} onClick={saveBracket} disabled={saving}>
+                {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save My Picks'}
+              </button>
+            </div>
+          )}
+          <p style={{ textAlign: 'center', color: MUTED, fontSize: '0.68rem', marginTop: 14, letterSpacing: 1 }}>
+            {isLocked ? 'Playoffs are underway! 🏀' : `Locks in: ${countdown}`}
+          </p>
         </div>
       )}
 
@@ -399,22 +497,22 @@ export default function App() {
             <div style={{ fontSize: '1rem', fontWeight: 700, color: GOLD, letterSpacing: 2 }}>LEADERBOARD</div>
             <button style={{ ...s.btn(), padding: '5px 12px', fontSize: '0.68rem' }} onClick={fetchBrackets}>Refresh</button>
           </div>
-          {allBrackets.length === 0 && <p style={{ color: MUTED, textAlign: 'center', marginTop: 40 }}>No brackets yet!</p>}
-          {[...allBrackets].map(b => {
-            const { score, correct, total } = calcScore(b.picks || {}, results);
-            const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-            return { ...b, score, correct, total, pct };
-          }).sort((a, b) => b.score - a.score).map((b, idx) => (
+          {ranked.length === 0 && <p style={{ color: MUTED, textAlign: 'center', marginTop: 40 }}>No brackets yet!</p>}
+          {ranked.map((b, idx) => (
             <div key={b.id} style={{ background: PANEL, border: `1px solid ${idx === 0 ? GOLD : BORDER}`, borderRadius: 6, marginBottom: 10, overflow: 'hidden' }}>
               <div style={{ padding: '12px 14px', cursor: 'pointer' }} onClick={() => setExpanded(expanded === b.id ? null : b.id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ fontSize: '1.2rem', width: 28 }}>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}</div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: idx === 0 ? GOLD : '#e8e8f0' }}>{b.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem', color: idx === 0 ? GOLD : '#e8e8f0' }}>{b.name}</span>
+                      {b.champEliminated && <span style={{ fontSize: '0.55rem', background: RED, color: '#fff', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>💀 ELIM</span>}
+                    </div>
                     <div style={{ fontSize: '0.68rem', color: MUTED, marginTop: 2 }}>{b.picks?.finals || '—'} to win</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.1rem', fontWeight: 700, color: GOLD }}>{b.score}pts</div>
+                    <div style={{ fontSize: '0.62rem', color: MUTED }}>max: {b.score + b.maxRemaining}</div>
                     <div style={{ fontSize: '0.65rem', color: b.pct >= 60 ? GREEN : b.pct >= 40 ? GOLD : MUTED }}>{b.pct}% correct</div>
                   </div>
                 </div>
