@@ -77,14 +77,13 @@ function calcScore(picks, results) {
 function getMostPopular(allBrackets) {
   const counts = {};
   allBrackets.forEach(b => {
-    Object.entries(b.picks || {}).forEach(([matchup, team]) => {
-      if (team) {
-        if (!counts[team]) counts[team] = 0;
-        counts[team]++;
-      }
-    });
+    const champ = b.picks?.finals;
+    if (champ) {
+      if (!counts[champ]) counts[champ] = 0;
+      counts[champ]++;
+    }
   });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
 }
 
 function getChampEliminated(picks, results) {
