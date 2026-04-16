@@ -426,22 +426,14 @@ export default function App() {
             </div>
           )}
 
-          {/* Most Popular Picks */}
+         {/* Most Popular Champion Pick */}
           {popularPicks.length > 0 && (
-            <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px', margin: '16px auto', maxWidth: 320, textAlign: 'left' }}>
-              <div style={{ fontSize: '0.62rem', color: GOLD, letterSpacing: 3, marginBottom: 10, textAlign: 'center' }}>🔥 MOST POPULAR PICKS</div>
-              {popularPicks.map(([team, count]) => (
-                <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <div style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{team}</div>
-                  <div style={{ fontSize: '0.7rem', color: MUTED }}>{count} pick{count !== 1 ? 's' : ''}</div>
-                  <div style={{ background: BORDER, borderRadius: 3, height: 6, width: 80 }}>
-                    <div style={{ width: `${(count / allBrackets.length) * 100}%`, background: GOLD, height: '100%', borderRadius: 3 }} />
-                  </div>
-                </div>
-              ))}
+            <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 20px', margin: '12px auto', maxWidth: 320, textAlign: 'center' }}>
+              <div style={{ fontSize: '0.6rem', color: GOLD, letterSpacing: 3, marginBottom: 6 }}>🔥 MOST POPULAR CHAMPION PICK</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#e8e8f0' }}>{popularPicks[0][0]}</div>
+              <div style={{ fontSize: '0.68rem', color: MUTED, marginTop: 3 }}>{popularPicks[0][1]} of {allBrackets.length} people picking them</div>
             </div>
           )}
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '16px auto 0' }}>
             {!isLocked && <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>}
             {!isLocked && <button style={{ ...s.btn(PANEL, MUTED), border: `1px solid ${BORDER}` }} onClick={() => setPage('edit')}>✏️ Edit My Bracket</button>}
