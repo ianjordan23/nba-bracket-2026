@@ -431,8 +431,12 @@ export default function App() {
             <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 20px', margin: '12px auto', maxWidth: 320, textAlign: 'center' }}>
               <div style={{ fontSize: '0.6rem', color: GOLD, letterSpacing: 3, marginBottom: 6 }}>🔥 MOST POPULAR CHAMPION PICK</div>
               <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#e8e8f0' }}>{popularPicks[0][0]}</div>
-              <div style={{ fontSize: '0.68rem', color: MUTED, marginTop: 3 }}>{popularPicks[0][1]} of {allBrackets.length} people picking them</div>
-            </div>
+             {popularPicks.slice(0,3).map(([team, count], i) => (
+                <div key={team} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} {team}</span>
+                  <span style={{ fontSize: '0.68rem', color: MUTED }}>{count} picks</span>
+                </div>
+              ))}
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 260, margin: '16px auto 0' }}>
             {!isLocked && <button style={s.btn()} onClick={() => { setPicks(INITIAL_PICKS); setMyId(null); setPage('bracket'); }}>📝 Fill Out My Bracket</button>}
