@@ -55,16 +55,13 @@ function getTopChampPicks(allBrackets) {
 }
 
 function getPickOfRound(allBrackets, results) {
-  // For each round, find who got the most correct
   const rounds = [1,2,4,8];
   const roundWinners = {};
   rounds.forEach(round => {
     const matchupsInRound = Object.keys(MATCHUP_ROUND).filter(m => MATCHUP_ROUND[m]===round);
     const completedMatchups = matchupsInRound.filter(m => results[m]);
     if (completedMatchups.length === 0) return;
-    
-    let best = 0;
-    let winners = [];
+    let best = 0; let winners = [];
     allBrackets.forEach(b => {
       const correct = completedMatchups.filter(m => b.picks?.[m] === results[m]).length;
       if (correct > best) { best = correct; winners = [b.name]; }
@@ -84,6 +81,7 @@ export default function App() {
   const [picks, setPicks] = useState(INITIAL_PICKS);
   const [teams, setTeams] = useState(INITIAL_TEAMS);
   const [results, setResults] = useState({});
+  const [series, setSeries] = useState({});
   const [allBrackets, setAllBrackets] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -91,14 +89,26 @@ export default function App() {
   const [expanded, setExpanded] = useState(null);
   const [countdown, setCountdown] = useState('');
   const [banner, setBanner] = useState(null);
-  const [adminPass, setAdminPass] = useState('');
-  const [adminAuthed, setAdminAuthed] = useState(false);
-  const [adminResults, setAdminResults] = useState({});
-  const [adminTeams, setAdminTeams] = useState(INITIAL_TEAMS);
-  const [adminSaved, setAdminSaved] = useState(false);
   const [lookupName, setLookupName] = useState('');
   const [lookupError, setLookupError] = useState('');
   const [lookupLoading, setLookupLoading] = useState(false);
+
+  // Admin state
+  const [adminPass, setAdminPass] = useState('');
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminResults, setAdminResults] = useState({});
+  const [adminSeries, setAdminSeries] = useState({});
+  const [adminTeams, setAdminTeams] = useState(INITIAL_TEAMS);
+  const [adminSaved, setAdminSaved] = useState(false);
+  const [adminLookupName, setAdminLookupName] = useState('');
+  const [adminLookupError, setAdminLookupError] = useState('');
+  const [adminLookupLoading, setAdminLookupLoading] = useState(false);
+  const [adminEditId, setAdminEditId] = useState(null);
+  const [adminEditName, setAdminEditName] = useState('');
+  const [adminEditPicks, setAdminEditPicks] = useState(INITIAL_PICKS);
+  const [adminEditSaving, setAdminEditSaving] = useState(false);
+  const [adminEditSaved, setAdminEditSaved] = useState(false);
+
   const bannerTimeout = useRef(null);
   const prevResults = useRef({});
 
@@ -119,22 +129,19 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Poll for new results every 30 seconds and show banner
   useEffect(() => {
     const poll = setInterval(async () => {
       const {data} = await supabase.from('results').select('*').eq('id',1).single();
       if (data && data.results) {
         const newResults = data.results;
         const oldResults = prevResults.current;
-        // Find any newly added results
         Object.entries(newResults).forEach(([matchup, winner]) => {
-          if (!oldResults[matchup] && winner) {
-            showBanner(`🏀 ${winner} wins!`);
-          }
+          if (!oldResults[matchup] && winner) showBanner(`🏀 ${winner} wins!`);
         });
         if (JSON.stringify(newResults) !== JSON.stringify(oldResults)) {
           setResults(newResults);
           if (data.teams) setTeams(data.teams);
+          if (data.series) setSeries(data.series);
           prevResults.current = newResults;
         }
       }
@@ -153,6 +160,8 @@ export default function App() {
     if (data) {
       setResults(data.results||{});
       setAdminResults(data.results||{});
+      setSeries(data.series||{});
+      setAdminSeries(data.series||{});
       prevResults.current = data.results||{};
       if (data.teams) { setTeams(data.teams); setAdminTeams(data.teams); }
     }
@@ -187,11 +196,49 @@ export default function App() {
     setLookupLoading(false);
   }
 
+  async function adminLookupBracket() {
+    if (!adminLookupName.trim()) return;
+    setAdminLookupLoading(true); setAdminLookupError('');
+    const {data} = await supabase.from('brackets').select('*').ilike('name',adminLookupName.trim()).limit(1);
+    if (data&&data.length>0) {
+      const b=data[0];
+      setAdminEditId(b.id);
+      setAdminEditName(b.name);
+      setAdminEditPicks(b.picks||INITIAL_PICKS);
+    } else { setAdminLookupError('No bracket found! Check spelling.'); }
+    setAdminLookupLoading(false);
+  }
+
+  async function saveAdminEditBracket() {
+    if (!adminEditId) return;
+    setAdminEditSaving(true);
+    await supabase.from('brackets').update({picks:adminEditPicks,name:adminEditName}).eq('id',adminEditId);
+    setAdminEditSaving(false); setAdminEditSaved(true);
+    setTimeout(()=>setAdminEditSaved(false),2000);
+  }
+
+  function adminPickWinner(matchup, team) {
+    const newPicks = {...adminEditPicks,[matchup]:team};
+    const downstream = {
+      w1:['ws1','wcf','finals'],w2:['ws1','wcf','finals'],
+      w3:['ws2','wcf','finals'],w4:['ws2','wcf','finals'],
+      ws1:['wcf','finals'],ws2:['wcf','finals'],wcf:['finals'],
+      e1:['es1','ecf','finals'],e2:['es1','ecf','finals'],
+      e3:['es2','ecf','finals'],e4:['es2','ecf','finals'],
+      es1:['ecf','finals'],es2:['ecf','finals'],ecf:['finals'],
+    };
+    if (adminEditPicks[matchup]!==team && downstream[matchup]) {
+      downstream[matchup].forEach(d=>{newPicks[d]=null;});
+    }
+    setAdminEditPicks(newPicks);
+  }
+
   async function saveAdminResults() {
     const {data} = await supabase.from('results').select('id').eq('id',1).single();
-    if (data) { await supabase.from('results').update({results:adminResults,teams:adminTeams}).eq('id',1); }
-    else { await supabase.from('results').insert([{id:1,results:adminResults,teams:adminTeams}]); }
-    setResults(adminResults); setTeams(adminTeams);
+    const payload = {results:adminResults, teams:adminTeams, series:adminSeries};
+    if (data) { await supabase.from('results').update(payload).eq('id',1); }
+    else { await supabase.from('results').insert([{id:1,...payload}]); }
+    setResults(adminResults); setTeams(adminTeams); setSeries(adminSeries);
     setAdminSaved(true); setTimeout(()=>setAdminSaved(false),2000);
   }
 
@@ -212,8 +259,9 @@ export default function App() {
     setPicks(newPicks);
   }
 
-  function getTeamList(id, myPicks) {
-    const w=teams.west,e=teams.east;
+  function getTeamList(id, myPicks, myTeams) {
+    const t = myTeams || teams;
+    const w=t.west,e=t.east;
     const map = {
       w1:[{seed:1,name:w[1]},{seed:8,name:w[8]}],
       w2:[{seed:4,name:w[4]},{seed:5,name:w[5]}],
@@ -248,8 +296,16 @@ export default function App() {
     vs:{textAlign:'center',fontSize:'0.55rem',color:BORDER,padding:'2px',background:'rgba(255,255,255,0.02)'},
   };
 
-  function renderMatchup(id, conf, myPicks, myResults, editable) {
+  function renderMatchup(id, conf, myPicks, myResults, onPick) {
     const t = getTeamList(id, myPicks);
+    const seriesData = series[id];
+    let seriesLabel = null;
+    if (seriesData && (seriesData.w || seriesData.l)) {
+      const {w, l, leader} = seriesData;
+      if (myResults[id]) seriesLabel = `${myResults[id]} wins ${w}-${l}`;
+      else if (leader === 'tied' || w === l) seriesLabel = `Tied ${w}-${l}`;
+      else if (leader) seriesLabel = `${leader} leads ${w}-${l}`;
+    }
     return (
       <div key={id} style={sty.mbox(conf)}>
         {t.map((team,i) => {
@@ -261,7 +317,7 @@ export default function App() {
           return (
             <React.Fragment key={i}>
               {i===1 && <div style={sty.vs}>VS</div>}
-              <div style={sty.trow(status)} onClick={()=>editable&&team.name!=='?'&&pickWinner(id,team.name)}>
+              <div style={sty.trow(status)} onClick={()=>onPick&&team.name!=='?'&&onPick(id,team.name)}>
                 <span style={sty.seed}>{team.seed}</span>
                 <span style={sty.tname(status)}>{team.name}</span>
                 {isCorrect && <span style={{fontSize:'0.6rem',background:GREEN,color:'#000',padding:'1px 5px',borderRadius:2,fontWeight:700}}>✓</span>}
@@ -271,31 +327,36 @@ export default function App() {
             </React.Fragment>
           );
         })}
+        {seriesLabel && (
+          <div style={{textAlign:'center',fontSize:'0.65rem',color:GOLD,padding:'4px',background:'rgba(255,255,255,0.03)',borderTop:`1px solid ${BORDER}`,letterSpacing:1}}>
+            {seriesLabel}
+          </div>
+        )}
       </div>
     );
   }
 
-  function renderBracket(myPicks, myResults, editable) {
+  function renderBracket(myPicks, myResults, onPick) {
     return (
       <div>
         <div style={sty.secLabel(WEST_ACC)}>🏀 Western Conference</div>
         <div style={sty.secLabel()}>First Round</div>
-        {['w1','w2','w3','w4'].map(id=>renderMatchup(id,'west',myPicks,myResults,editable))}
+        {['w1','w2','w3','w4'].map(id=>renderMatchup(id,'west',myPicks,myResults,onPick))}
         <div style={sty.secLabel()}>Semifinals</div>
-        {['ws1','ws2'].map(id=>renderMatchup(id,'west',myPicks,myResults,editable))}
+        {['ws1','ws2'].map(id=>renderMatchup(id,'west',myPicks,myResults,onPick))}
         <div style={sty.secLabel()}>Conference Finals</div>
-        {renderMatchup('wcf','west',myPicks,myResults,editable)}
+        {renderMatchup('wcf','west',myPicks,myResults,onPick)}
         <div style={{marginTop:20}}/>
         <div style={sty.secLabel(EAST_ACC)}>🏀 Eastern Conference</div>
         <div style={sty.secLabel()}>First Round</div>
-        {['e1','e2','e3','e4'].map(id=>renderMatchup(id,'east',myPicks,myResults,editable))}
+        {['e1','e2','e3','e4'].map(id=>renderMatchup(id,'east',myPicks,myResults,onPick))}
         <div style={sty.secLabel()}>Semifinals</div>
-        {['es1','es2'].map(id=>renderMatchup(id,'east',myPicks,myResults,editable))}
+        {['es1','es2'].map(id=>renderMatchup(id,'east',myPicks,myResults,onPick))}
         <div style={sty.secLabel()}>Conference Finals</div>
-        {renderMatchup('ecf','east',myPicks,myResults,editable)}
+        {renderMatchup('ecf','east',myPicks,myResults,onPick)}
         <div style={{marginTop:20}}/>
         <div style={sty.secLabel(GOLD)}>🏆 NBA Finals</div>
-        {renderMatchup('finals','finals',myPicks,myResults,editable)}
+        {renderMatchup('finals','finals',myPicks,myResults,onPick)}
       </div>
     );
   }
@@ -337,12 +398,13 @@ export default function App() {
           <div style={{maxWidth:320,margin:'60px auto'}}>
             <div style={{fontSize:'1.1rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:20,textAlign:'center'}}>🔒 ADMIN LOGIN</div>
             <div style={sty.label}>Password</div>
-            <input style={sty.input} type="password" placeholder="Password..." value={adminPass} onChange={e=>setAdminPass(e.target.value)}/>
+            <input style={sty.input} type="password" placeholder="Password..." value={adminPass} onChange={e=>setAdminPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&adminPass===ADMIN_PASSWORD&&setAdminAuthed(true)}/>
             <button style={{...sty.btn(),width:'100%'}} onClick={()=>{if(adminPass===ADMIN_PASSWORD)setAdminAuthed(true);else alert('Wrong password!');}}>Login</button>
           </div>
         ) : (
           <>
-            <div style={{fontSize:'1rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:16}}>ENTER RESULTS</div>
+            {/* Results Section */}
+            <div style={{fontSize:'1rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:16}}>ENTER RESULTS & SERIES SCORES</div>
             <div style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:6,padding:12,marginBottom:14}}>
               <div style={{fontSize:'0.65rem',color:GOLD,letterSpacing:2,marginBottom:10}}>PLAY-IN SEEDS (7 & 8)</div>
               {['west','east'].map(conf=>(
@@ -359,32 +421,67 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {adminMatchups.map(({id,label,teams:mTeams})=>(
-              <div key={id} style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:6,padding:'10px 12px',marginBottom:8}}>
-                <div style={{fontSize:'0.62rem',color:MUTED,letterSpacing:2,marginBottom:7}}>{label}</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {mTeams.length>0 ? mTeams.map(team=>(
-                    <button key={team} style={{...sty.btn(adminResults[id]===team?GREEN:PANEL,adminResults[id]===team?'#000':'#e8e8f0'),border:`1px solid ${adminResults[id]===team?GREEN:BORDER}`,padding:'6px 12px',fontSize:'0.78rem'}}
-                      onClick={()=>setAdminResults(prev=>({...prev,[id]:team}))}>{team}</button>
-                  )) : <span style={{fontSize:'0.75rem',color:MUTED}}>Enter earlier rounds first</span>}
-                  {adminResults[id] && (
-                    <button style={{...sty.btn(PANEL,RED),border:`1px solid ${RED}`,padding:'6px 10px',fontSize:'0.75rem'}}
-                      onClick={()=>setAdminResults(prev=>{const n={...prev};delete n[id];return n;})}>Clear</button>
+            {adminMatchups.map(({id,label,teams:mTeams})=>{
+              const ser = adminSeries[id]||{w:'',l:'',leader:''};
+              return (
+                <div key={id} style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:6,padding:'10px 12px',marginBottom:8}}>
+                  <div style={{fontSize:'0.62rem',color:MUTED,letterSpacing:2,marginBottom:7}}>{label}</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                    {mTeams.length>0 ? mTeams.map(team=>(
+                      <button key={team} style={{...sty.btn(adminResults[id]===team?GREEN:PANEL,adminResults[id]===team?'#000':'#e8e8f0'),border:`1px solid ${adminResults[id]===team?GREEN:BORDER}`,padding:'6px 12px',fontSize:'0.78rem'}}
+                        onClick={()=>setAdminResults(prev=>({...prev,[id]:team}))}>{team}</button>
+                    )) : <span style={{fontSize:'0.75rem',color:MUTED}}>Enter earlier rounds first</span>}
+                    {adminResults[id] && (
+                      <button style={{...sty.btn(PANEL,RED),border:`1px solid ${RED}`,padding:'6px 10px',fontSize:'0.75rem'}}
+                        onClick={()=>setAdminResults(prev=>{const n={...prev};delete n[id];return n;})}>Clear</button>
+                    )}
+                  </div>
+                  {mTeams.length>0 && (
+                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                      <span style={{fontSize:'0.65rem',color:MUTED}}>Series:</span>
+                      <select style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:3,color:'#e8e8f0',padding:'4px 8px',fontSize:'0.8rem'}}
+                        value={ser.leader||''}
+                        onChange={e=>setAdminSeries(prev=>({...prev,[id]:{...ser,leader:e.target.value}}))}>
+                        <option value="">Leader...</option>
+                        {mTeams.map(t=><option key={t} value={t}>{t}</option>)}
+                        <option value="tied">Tied</option>
+                      </select>
+                      <input type="number" min="0" max="4" style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:3,color:'#e8e8f0',padding:'4px 6px',fontSize:'0.8rem',width:46}}
+                        placeholder="W" value={ser.w||''}
+                        onChange={e=>setAdminSeries(prev=>({...prev,[id]:{...ser,w:e.target.value}}))}/>
+                      <span style={{color:MUTED}}>-</span>
+                      <input type="number" min="0" max="4" style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:3,color:'#e8e8f0',padding:'4px 6px',fontSize:'0.8rem',width:46}}
+                        placeholder="L" value={ser.l||''}
+                        onChange={e=>setAdminSeries(prev=>({...prev,[id]:{...ser,l:e.target.value}}))}/>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
-         <div style={{textAlign:'center',marginTop:16}}>
+              );
+            })}
+            <div style={{textAlign:'center',marginTop:16,marginBottom:32}}>
               <button style={sty.btn()} onClick={saveAdminResults}>{adminSaved?'✅ Saved!':'💾 Save Results'}</button>
             </div>
 
-            <div style={{marginTop:24,background:PANEL,border:`1px solid ${BORDER}`,borderRadius:6,padding:12}}>
-              <div style={{fontSize:'0.65rem',color:GOLD,letterSpacing:2,marginBottom:10}}>✏️ EDIT A PLAYER'S BRACKET</div>
-              <input style={{...sty.input,marginBottom:8}} placeholder="Enter player name..." value={lookupName} onChange={e=>setLookupName(e.target.value)} autoComplete="off"/>
-              {lookupError && <div style={{fontSize:'0.75rem',color:RED,marginBottom:8}}>{lookupError}</div>}
-              <button style={{...sty.btn(),width:'100%'}} onClick={lookupBracket} disabled={lookupLoading}>
-                {lookupLoading?'Looking up...':'Find & Edit Bracket'}
+            {/* Edit Player Bracket Section */}
+            <div style={{borderTop:`1px solid ${BORDER}`,paddingTop:24}}>
+              <div style={{fontSize:'1rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:16}}>✏️ EDIT A PLAYER'S BRACKET</div>
+              <input style={sty.input} placeholder="Type player name..." value={adminLookupName} onChange={e=>setAdminLookupName(e.target.value)} autoComplete="off"/>
+              {adminLookupError && <div style={{fontSize:'0.75rem',color:RED,marginBottom:10}}>{adminLookupError}</div>}
+              <button style={{...sty.btn(),width:'100%',marginBottom:16}} onClick={adminLookupBracket} disabled={adminLookupLoading}>
+                {adminLookupLoading?'Looking up...':'Find Bracket'}
               </button>
+
+              {adminEditId && (
+                <div style={{background:PANEL,border:`1px solid ${GOLD}`,borderRadius:6,padding:12}}>
+                  <div style={{fontSize:'0.75rem',color:GOLD,fontWeight:700,marginBottom:12}}>Editing: {adminEditName}</div>
+                  {renderBracket(adminEditPicks, results, adminPickWinner)}
+                  <div style={{textAlign:'center',marginTop:16}}>
+                    <button style={sty.btn()} onClick={saveAdminEditBracket} disabled={adminEditSaving}>
+                      {adminEditSaving?'Saving...':adminEditSaved?'✅ Saved!':'💾 Save Bracket'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -396,10 +493,9 @@ export default function App() {
     <div style={{minHeight:'100vh',background:DARK,color:'#e8e8f0',fontFamily:"'Barlow Condensed','Arial Narrow',sans-serif",padding:'0 0 60px'}}>
       <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet"/>
 
-      {/* Result Banner */}
       {banner && (
-        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:9999,background:GREEN,color:'#000',textAlign:'center',padding:'14px',fontFamily:"'Barlow Condensed',sans-serif",fontSize:'1.1rem',fontWeight:700,letterSpacing:2,boxShadow:'0 4px 20px rgba(0,0,0,0.5)',animation:'slideDown 0.3s ease'}}>
-          {banner} <span style={{opacity:0.6,fontSize:'0.8rem',marginLeft:8}}>tap anywhere to dismiss</span>
+        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:9999,background:GREEN,color:'#000',textAlign:'center',padding:'14px',fontFamily:"'Barlow Condensed',sans-serif",fontSize:'1.1rem',fontWeight:700,letterSpacing:2,boxShadow:'0 4px 20px rgba(0,0,0,0.5)',cursor:'pointer'}} onClick={()=>setBanner(null)}>
+          {banner} <span style={{opacity:0.6,fontSize:'0.8rem',marginLeft:8}}>tap to dismiss</span>
         </div>
       )}
 
@@ -414,7 +510,7 @@ export default function App() {
       </div>
 
       {page==='home' && (
-        <div style={{...sty.page,textAlign:'center',paddingTop:28}} onClick={()=>banner&&setBanner(null)}>
+        <div style={{...sty.page,textAlign:'center',paddingTop:28}}>
           <div style={{fontSize:'2.5rem',marginBottom:8}}>🏀</div>
           <div style={{fontSize:'1.3rem',fontWeight:700,color:GOLD,letterSpacing:2,marginBottom:4}}>NBA 2026 PLAYOFFS</div>
           {!isLocked ? (
@@ -440,7 +536,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Pick of the Round */}
           {Object.keys(pickOfRound).length>0 && (
             <div style={{background:PANEL,border:`1px solid ${BORDER}`,borderRadius:8,padding:'14px',margin:'12px auto',maxWidth:300,textAlign:'left'}}>
               <div style={{fontSize:'0.6rem',color:GOLD,letterSpacing:3,marginBottom:10,textAlign:'center'}}>👑 PICK OF THE ROUND</div>
@@ -469,27 +564,15 @@ export default function App() {
           <div style={sty.label}>Your Name</div>
           <input style={sty.input} placeholder="Enter your name exactly as saved..." value={lookupName} onChange={e=>setLookupName(e.target.value)} autoComplete="off"/>
           {lookupError && <div style={{fontSize:'0.75rem',color:RED,marginBottom:10}}>{lookupError}</div>}
-         <button style={{...sty.btn(),width:'100%'}} onClick={async () => {
-                if (!lookupName.trim()) return;
-                setLookupLoading(true); setLookupError('');
-                const {data} = await supabase.from('brackets').select('*').ilike('name', lookupName.trim()).limit(1);
-                if (data && data.length > 0) {
-                  const b = data[0];
-                  setMyId(b.id); setName(b.name); setPicks(b.picks || INITIAL_PICKS);
-                  window.location.href = '/';
-                } else {
-                  setLookupError('No bracket found! Check spelling.');
-                }
-                setLookupLoading(false);
-              }} disabled={lookupLoading}>
-                {lookupLoading?'Looking up...':'Find & Edit Bracket'}
-              </button>
+          <button style={{...sty.btn(),width:'100%'}} onClick={lookupBracket} disabled={lookupLoading}>
+            {lookupLoading?'Looking up...':'Find My Bracket'}
+          </button>
           <p style={{color:MUTED,fontSize:'0.7rem',marginTop:12,textAlign:'center'}}>Spell your name exactly as you entered it!</p>
         </div>
       )}
 
       {page==='bracket' && (
-        <div style={sty.page} onClick={()=>banner&&setBanner(null)}>
+        <div style={sty.page}>
           {isLocked && (
             <div style={{background:'rgba(231,76,60,0.1)',border:`1px solid ${RED}`,borderRadius:6,padding:12,marginBottom:14,textAlign:'center'}}>
               <div style={{fontSize:'0.9rem',color:RED,fontWeight:700}}>🔒 Brackets are locked!</div>
@@ -497,7 +580,7 @@ export default function App() {
           )}
           <div style={sty.label}>Your Name</div>
           <input style={sty.input} placeholder="Enter your name..." defaultValue={name} onBlur={e=>setName(e.target.value)} autoComplete="off"/>
-          {renderBracket(picks,results,!isLocked)}
+          {renderBracket(picks, results, isLocked ? null : pickWinner)}
           <div style={{textAlign:'center',background:'linear-gradient(135deg,rgba(200,168,75,0.15),rgba(200,168,75,0.05))',border:`1px solid rgba(200,168,75,0.4)`,borderRadius:8,padding:'18px',margin:'18px 0'}}>
             <div style={{fontSize:'0.7rem',color:GOLD,letterSpacing:4,textTransform:'uppercase'}}>🏆 My Champion Pick</div>
             <div style={{fontSize:'1.8rem',fontWeight:700,color:'#e8c86b',marginTop:5}}>{picks.finals||'?'}</div>
@@ -516,7 +599,7 @@ export default function App() {
       )}
 
       {page==='leaderboard' && (
-        <div style={sty.page} onClick={()=>banner&&setBanner(null)}>
+        <div style={sty.page}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontSize:'1rem',fontWeight:700,color:GOLD,letterSpacing:2}}>LEADERBOARD</div>
             <button style={{...sty.btn(),padding:'5px 12px',fontSize:'0.68rem'}} onClick={fetchBrackets}>Refresh</button>
@@ -549,7 +632,7 @@ export default function App() {
               </div>
               {expanded===b.id && (
                 <div style={{borderTop:`1px solid ${BORDER}`,padding:'12px 14px'}}>
-                  {renderBracket(b.picks||INITIAL_PICKS,results,false)}
+                  {renderBracket(b.picks||INITIAL_PICKS,results,null)}
                 </div>
               )}
             </div>
