@@ -469,9 +469,21 @@ export default function App() {
           <div style={sty.label}>Your Name</div>
           <input style={sty.input} placeholder="Enter your name exactly as saved..." value={lookupName} onChange={e=>setLookupName(e.target.value)} autoComplete="off"/>
           {lookupError && <div style={{fontSize:'0.75rem',color:RED,marginBottom:10}}>{lookupError}</div>}
-          <button style={{...sty.btn(),width:'100%'}} onClick={lookupBracket} disabled={lookupLoading}>
-            {lookupLoading?'Looking up...':'Find My Bracket'}
-          </button>
+         <button style={{...sty.btn(),width:'100%'}} onClick={async () => {
+                if (!lookupName.trim()) return;
+                setLookupLoading(true); setLookupError('');
+                const {data} = await supabase.from('brackets').select('*').ilike('name', lookupName.trim()).limit(1);
+                if (data && data.length > 0) {
+                  const b = data[0];
+                  setMyId(b.id); setName(b.name); setPicks(b.picks || INITIAL_PICKS);
+                  window.location.href = '/';
+                } else {
+                  setLookupError('No bracket found! Check spelling.');
+                }
+                setLookupLoading(false);
+              }} disabled={lookupLoading}>
+                {lookupLoading?'Looking up...':'Find & Edit Bracket'}
+              </button>
           <p style={{color:MUTED,fontSize:'0.7rem',marginTop:12,textAlign:'center'}}>Spell your name exactly as you entered it!</p>
         </div>
       )}
