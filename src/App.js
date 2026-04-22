@@ -374,8 +374,17 @@ export default function App() {
                 </div>
               </div>
             ))}
-            <div style={{textAlign:'center',marginTop:16}}>
+         <div style={{textAlign:'center',marginTop:16}}>
               <button style={sty.btn()} onClick={saveAdminResults}>{adminSaved?'✅ Saved!':'💾 Save Results'}</button>
+            </div>
+
+            <div style={{marginTop:24,background:PANEL,border:`1px solid ${BORDER}`,borderRadius:6,padding:12}}>
+              <div style={{fontSize:'0.65rem',color:GOLD,letterSpacing:2,marginBottom:10}}>✏️ EDIT A PLAYER'S BRACKET</div>
+              <input style={{...sty.input,marginBottom:8}} placeholder="Enter player name..." value={lookupName} onChange={e=>setLookupName(e.target.value)} autoComplete="off"/>
+              {lookupError && <div style={{fontSize:'0.75rem',color:RED,marginBottom:8}}>{lookupError}</div>}
+              <button style={{...sty.btn(),width:'100%'}} onClick={lookupBracket} disabled={lookupLoading}>
+                {lookupLoading?'Looking up...':'Find & Edit Bracket'}
+              </button>
             </div>
           </>
         )}
