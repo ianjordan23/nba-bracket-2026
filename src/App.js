@@ -393,7 +393,7 @@ export default function App() {
   const pickOfRound = getPickOfRound(allBrackets, results);
   const ranked = allBrackets.map(function(b) {
     const scores = calcScore(b.picks || {}, results);
-    const champEliminated = b.picks && b.picks.finals && Object.keys(results).length > 0 && !Object.values(results).includes(b.picks.finals);
+    const champEliminated = b.picks && b.picks.finals && Object.keys(results).some(function(m) {   const winner = results[m];   const teamList = getTeamList(m, b.picks || INITIAL_PICKS);   return teamList.some(function(t) { return t.name === b.picks.finals; }) && winner && winner !== b.picks.finals; });
     return Object.assign({}, b, scores, { champEliminated: champEliminated });
   }).sort(function(a, b) { return b.score - a.score; });
 
